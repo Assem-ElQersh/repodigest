@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ghdigest"
+version = "1.0.0"
+description = "Fetch any GitHub repository into a single LLM-ready digest — metadata, directory tree, file contents, and built-in AI analysis."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Assem ElQersh", email = "assemsaid35@gmail.com" },
+]
+keywords = [
+    "llm", "github", "repository", "digest", "ai", "rag",
+    "groq", "mistral", "gemini", "openrouter", "code-analysis",
+    "developer-tools", "context-window",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+]
+
+# Core dependencies — needed for fetch + CLI + server
+dependencies = [
+    "requests>=2.31.0",
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.0.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+# pip install repodigest[llm]  — adds all LLM providers
+llm = [
+    "openai>=1.30.0",           # Groq, Mistral, OpenRouter (OpenAI-compatible)
+    "google-generativeai>=0.8.0",  # Gemini
+]
+# pip install repodigest[all]
+all = [
+    "openai>=1.30.0",
+    "google-generativeai>=0.8.0",
+]
+
+[project.scripts]
+repodigest = "github_ingest.cli:main"
+
+[project.urls]
+Homepage   = "https://github.com/Assem-ElQersh/repodigest"
+Repository = "https://github.com/Assem-ElQersh/repodigest"
+Issues     = "https://github.com/Assem-ElQersh/repodigest/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["github_ingest"]
+
+# Ensure static assets (web UI) are included in the wheel
+[tool.hatch.build.targets.wheel.shared-data]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "github_ingest/",
+    "README.md",
+    "LICENSE",
+    "requirements.txt",
+    "pyproject.toml",
+]
