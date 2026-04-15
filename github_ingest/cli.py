@@ -32,7 +32,7 @@ def _progress_bar(current: int, total: int, path: str) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="github-ingest",
+        prog="repodigest",
         description=(
             "Fetch an entire GitHub repository — metadata, file tree, and all "
             "text file contents — and save an LLM-ready .txt digest and a "

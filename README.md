@@ -1,6 +1,23 @@
 <h1 align="center">RepoDigest</h1>
 
+<p align="center">
+  <a href="https://pypi.org/project/ghdigest/"><img src="https://img.shields.io/pypi/v/ghdigest.svg" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/ghdigest/"><img src="https://img.shields.io/pypi/pyversions/ghdigest.svg" alt="Python versions"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
+
 Fetch any GitHub repository via the GitHub API and produce an **LLM-ready text digest** and a **structured JSON file** — including the repo's "about" metadata, full directory tree, and all file contents. Then optionally pass the digest directly to an LLM for deep analysis.
+
+---
+
+## Installation
+
+```bash
+pip install ghdigest          # core — fetch + CLI + web UI
+pip install ghdigest[llm]     # + Groq, Mistral, OpenRouter, Gemini analysis
+```
+
+**PyPI:** https://pypi.org/project/ghdigest/
 
 ---
 
@@ -16,14 +33,6 @@ Fetch any GitHub repository via the GitHub API and produce an **LLM-ready text d
 - **CLI**, **importable Python library**, and **FastAPI server**
 - GitHub token support (raises rate limit from 60 to 5,000 req/h)
 - Outputs both `.txt` (LLM digest) and `.json` (structured data)
-
----
-
-## Installation
-
-```bash
-pip install -r requirements.txt
-```
 
 ---
 
