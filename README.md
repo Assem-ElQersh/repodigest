@@ -29,6 +29,7 @@ pip install ghdigest[llm]     # + Groq, Mistral, OpenRouter, Gemini analysis
 - Automatic filtering of binary files and noise directories
 - Configurable max file size (100 KB → No limit)
 - **Web UI** with live progress bar, results tabs, and download buttons
+- **Browse User Repos panel** — list all public repos for any GitHub user, with one-click ingest
 - **LLM Analysis panel** — send the digest to Groq, Mistral, OpenRouter, or Gemini with 5 preset prompts
 - **CLI**, **importable Python library**, and **FastAPI server**
 - GitHub token support (raises rate limit from 60 to 5,000 req/h)
@@ -59,6 +60,14 @@ Visit **[http://localhost:8001](http://localhost:8001)** after starting the serv
 - Results: about card (description, topics, stats), summary, directory tree
 - Switch between **TXT digest / JSON / File tree** tabs
 - Copy to clipboard or download `.txt` / `.json`
+
+### Browse User Repos panel
+- Enter any GitHub username and hit **Browse**
+- Filter by type: **Own repos** (no forks) or **All** (includes forks)
+- Sort by: last updated, created, last pushed, or name A–Z
+- Each repo card shows: name, description, language (colour-coded), stars, topics, license, last-updated time ago
+- Click **Ingest →** on any card to instantly populate the ingest form and fetch that repo's full digest
+- Token entered here is automatically copied to the ingest form
 
 ### LLM Analysis panel (below results)
 - Select a provider, paste your API key, pick a model
@@ -178,6 +187,36 @@ for chunk in analyze_stream(
     print(chunk, end="", flush=True)
 ```
 
+### List all repos for a user
+
+```python
+from github_ingest import fetch_user_repos
+
+# All public repos the user created (no forks), sorted by last updated
+repos = fetch_user_repos("some-user", token="ghp_xxx")
+
+for repo in repos:
+    print(repo["name"], "|", repo["description"])
+
+# Include forks, sort by stars
+repos = fetch_user_repos("some-user", token="ghp_xxx", repo_type="all", sort="updated")
+```
+
+Each item contains: `name`, `full_name`, `description`, `html_url`, `language`, `stars`, `forks`, `fork`, `topics`, `license`, `updated_at`, `created_at`, `visibility`, `default_branch`.
+
+Pair with `ingest()` to process an entire profile in one loop:
+
+```python
+from github_ingest import fetch_user_repos, ingest, to_txt
+
+repos = fetch_user_repos("some-user", token="ghp_xxx")
+
+for repo in repos:
+    result = ingest(repo["full_name"], token="ghp_xxx")
+    digest = to_txt(result)
+    # → pass to LLM, save to disk, etc.
+```
+
 ### Individual fetchers
 
 ```python
@@ -214,6 +253,7 @@ uvicorn github_ingest.server:app --reload --port 8001
 | `POST` | `/ingest` | Ingest repo → JSON |
 | `POST` | `/ingest/txt` | Ingest repo → plain-text digest |
 | `GET` | `/ingest?repo=owner/repo&fmt=json` | Ingest via query params |
+| `GET` | `/users/{username}/repos` | List all public repos for a user |
 | `GET` | `/analyze/providers` | List providers, models, prompt types |
 | `POST` | `/analyze` | Analyze digest → SSE stream |
 | `POST` | `/analyze/test` | Test an API key with a minimal request |
@@ -230,6 +270,21 @@ uvicorn github_ingest.server:app --reload --port 8001
 ```
 
 Set `max_file_size` to `0` for no limit. `token` falls back to the `GITHUB_TOKEN` env var.
+
+### GET /users/{username}/repos
+
+```
+GET /users/assem-elqersh/repos
+GET /users/assem-elqersh/repos?type=all&sort=updated&token=ghp_xxx
+```
+
+| Query param | Default | Options |
+|---|---|---|
+| `type` | `owner` | `owner` (no forks), `all` (includes forks) |
+| `sort` | `updated` | `updated`, `created`, `pushed`, `full_name` |
+| `token` | — | GitHub PAT (falls back to `GITHUB_TOKEN` env var) |
+
+Returns an array of repo objects with: `name`, `full_name`, `description`, `html_url`, `language`, `stars`, `forks`, `fork`, `topics`, `license`, `updated_at`, `created_at`, `visibility`, `default_branch`.
 
 ### POST /analyze
 

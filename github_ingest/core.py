@@ -197,6 +197,69 @@ def _get_branch_sha(
 
 
 # ---------------------------------------------------------------------------
+# User-level fetchers
+# ---------------------------------------------------------------------------
+
+def fetch_user_repos(
+    username: str,
+    token: Optional[str] = None,
+    repo_type: str = "owner",
+    sort: str = "updated",
+) -> list[dict]:
+    """
+    Fetch all public repositories for a GitHub user.
+
+    Parameters
+    ----------
+    username:
+        GitHub username.
+    token:
+        Optional GitHub PAT.  Required to see your own private repos via the
+        ``/user/repos`` endpoint — but that endpoint is not used here; this
+        function always targets ``/users/{username}/repos`` which only returns
+        public repos.
+    repo_type:
+        ``"owner"`` (default) — only repos the user created, no forks.
+        ``"all"``   — includes forked repos as well.
+    sort:
+        ``"updated"`` (default), ``"created"``, ``"pushed"``, or ``"full_name"``.
+
+    Returns
+    -------
+    list[dict]
+        Each element is the raw GitHub repo object (same shape as the REST API).
+        Useful fields: ``name``, ``full_name``, ``description``, ``html_url``,
+        ``stargazers_count``, ``language``, ``fork``, ``updated_at``.
+    """
+    headers = _make_headers(token)
+    repos: list[dict] = []
+    page = 1
+
+    while True:
+        response = requests.get(
+            f"{GITHUB_API}/users/{username}/repos",
+            headers=headers,
+            params={
+                "per_page": 100,
+                "page": page,
+                "type": repo_type,
+                "sort": sort,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        batch: list[dict] = response.json()
+
+        if not batch:
+            break
+
+        repos.extend(batch)
+        page += 1
+
+    return repos
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 

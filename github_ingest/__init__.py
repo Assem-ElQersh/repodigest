@@ -27,6 +27,7 @@ from .core import (
     fetch_blob_content,
     fetch_repo_about,
     fetch_repo_tree,
+    fetch_user_repos,
     ingest,
 )
 from .formatter import to_dict, to_json, to_txt
@@ -38,6 +39,7 @@ __all__ = [
     "fetch_repo_about",
     "fetch_repo_tree",
     "fetch_blob_content",
+    "fetch_user_repos",
     "DEFAULT_MAX_FILE_SIZE",
     # Formatters
     "to_txt",

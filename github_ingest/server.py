@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
 from .analyzer import PRESET_PROMPTS, PROVIDERS
-from .core import DEFAULT_MAX_FILE_SIZE, ingest
+from .core import DEFAULT_MAX_FILE_SIZE, fetch_user_repos, ingest
 from .formatter import to_dict, to_txt
 
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -179,6 +179,59 @@ async def ingest_repo_get(
     if fmt == "txt":
         return PlainTextResponse(to_txt(result))
     return to_dict(result)
+
+
+# ---------------------------------------------------------------------------
+# User repos
+# ---------------------------------------------------------------------------
+
+@app.get("/users/{username}/repos", tags=["users"])
+async def list_user_repos(
+    username: str,
+    token: Optional[str] = Query(None, description="GitHub personal access token"),
+    type: str = Query("owner", description="'owner' (no forks) or 'all'"),
+    sort: str = Query("updated", description="'updated', 'created', 'pushed', or 'full_name'"),
+) -> list[dict]:
+    """
+    Return all public repositories for a GitHub user.
+
+    Each item contains the raw GitHub repo object.  Key fields:
+    ``name``, ``full_name``, ``description``, ``html_url``,
+    ``stargazers_count``, ``language``, ``fork``, ``updated_at``.
+    """
+    resolved_token = token or os.environ.get("GITHUB_TOKEN")
+
+    try:
+        repos = fetch_user_repos(
+            username,
+            token=resolved_token,
+            repo_type=type,
+            sort=sort,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return [
+        {
+            "name": r.get("name"),
+            "full_name": r.get("full_name"),
+            "description": r.get("description"),
+            "html_url": r.get("html_url"),
+            "language": r.get("language"),
+            "stars": r.get("stargazers_count"),
+            "forks": r.get("forks_count"),
+            "fork": r.get("fork"),
+            "visibility": r.get("visibility"),
+            "default_branch": r.get("default_branch"),
+            "updated_at": r.get("updated_at"),
+            "created_at": r.get("created_at"),
+            "topics": r.get("topics", []),
+            "open_issues": r.get("open_issues_count"),
+            "size_kb": r.get("size"),
+            "license": (r.get("license") or {}).get("spdx_id"),
+        }
+        for r in repos
+    ]
 
 
 # ---------------------------------------------------------------------------
