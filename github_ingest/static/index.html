@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitHub Ingest</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2330;
+      --border:    #30363d;
+      --accent:    #238636;
+      --accent-h:  #2ea043;
+      --blue:      #1f6feb;
+      --blue-h:    #388bfd;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --danger:    #f85149;
+      --tag-bg:    #21262d;
+      --radius:    10px;
+      --font:      'Inter', system-ui, sans-serif;
+      --mono:      'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    a { color: var(--blue-h); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      padding: 3rem 0 2.5rem;
+    }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: .6rem;
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -.5px;
+    }
+
+    .logo svg { width: 36px; height: 36px; }
+
+    .tagline {
+      color: var(--muted);
+      margin-top: .5rem;
+      font-size: .95rem;
+    }
+
+    /* ── Card ─────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+    }
+
+    /* ── Form ─────────────────────────────────────────────────── */
+    .form-row {
+      display: flex;
+      gap: .75rem;
+      align-items: flex-end;
+    }
+
+    .field { display: flex; flex-direction: column; gap: .4rem; flex: 1; }
+    .field label { font-size: .8rem; color: var(--muted); font-weight: 500; letter-spacing: .3px; text-transform: uppercase; }
+
+    input, select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: .95rem;
+      padding: .55rem .8rem;
+      width: 100%;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input:focus, select:focus { border-color: var(--blue); }
+    input::placeholder { color: var(--muted); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: .9rem;
+      font-weight: 600;
+      padding: .58rem 1.25rem;
+      transition: background .15s, opacity .15s;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover:not(:disabled) { border-color: var(--blue); }
+
+    .btn-icon { background: transparent; color: var(--muted); padding: .4rem .6rem; }
+    .btn-icon:hover { color: var(--text); }
+
+    .advanced-toggle {
+      margin-top: 1rem;
+      font-size: .82rem;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+    }
+    .advanced-toggle:hover { color: var(--text); }
+
+    .advanced-panel {
+      display: none;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      gap: .75rem;
+    }
+    .advanced-panel.open { display: flex; flex-wrap: wrap; }
+
+    /* ── Progress ─────────────────────────────────────────────── */
+    .progress-wrap {
+      display: none;
+      margin-top: 1.5rem;
+      flex-direction: column;
+      gap: .6rem;
+    }
+    .progress-wrap.visible { display: flex; }
+
+    .progress-label {
+      font-size: .82rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .progress-bar-bg {
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--blue), var(--accent));
+      border-radius: 99px;
+      transition: width .4s ease;
+      width: 0%;
+    }
+
+    .progress-file {
+      font-size: .78rem;
+      color: var(--muted);
+      font-family: var(--mono);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Error banner ─────────────────────────────────────────── */
+    .error-banner {
+      display: none;
+      margin-top: 1rem;
+      background: rgba(248,81,73,.12);
+      border: 1px solid rgba(248,81,73,.4);
+      border-radius: 6px;
+      padding: .75rem 1rem;
+      color: var(--danger);
+      font-size: .9rem;
+    }
+    .error-banner.visible { display: block; }
+
+    /* ── Results ──────────────────────────────────────────────── */
+    #results { display: none; margin-top: 2rem; }
+    #results.visible { display: block; }
+
+    /* About card */
+    .about-card {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .about-main { grid-column: 1 / -1; }
+
+    .repo-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      flex-wrap: wrap;
+    }
+
+    .branch-badge {
+      font-size: .72rem;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: .15rem .6rem;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .description {
+      color: var(--muted);
+      margin-top: .35rem;
+      font-size: .9rem;
+    }
+
+    .topics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .4rem;
+      margin-top: .6rem;
+    }
+    .topic {
+      font-size: .75rem;
+      background: rgba(31,111,235,.15);
+      color: var(--blue-h);
+      border: 1px solid rgba(31,111,235,.25);
+      border-radius: 99px;
+      padding: .15rem .65rem;
+    }
+
+    .stat-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+      margin-top: .75rem;
+    }
+    .stat {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      font-size: .82rem;
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .25rem .65rem;
+    }
+    .stat svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .75rem;
+      margin-top: .6rem;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+    .meta-row span { display: flex; align-items: center; gap: .3rem; }
+
+    .summary-bar {
+      display: flex;
+      gap: 1rem;
+      padding: .9rem 1.1rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .summary-stat {
+      display: flex;
+      flex-direction: column;
+      gap: .1rem;
+    }
+    .summary-stat .num { font-size: 1.4rem; font-weight: 700; color: var(--text); }
+    .summary-stat .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+
+    /* ── Output tabs ──────────────────────────────────────────── */
+    .output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: .75rem;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+
+    .tabs {
+      display: flex;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .tab {
+      padding: .35rem .85rem;
+      font-size: .82rem;
+      cursor: pointer;
+      color: var(--muted);
+      transition: background .15s, color .15s;
+      user-select: none;
+    }
+    .tab.active { background: var(--border); color: var(--text); font-weight: 600; }
+    .tab:hover:not(.active) { color: var(--text); }
+
+    .actions { display: flex; gap: .5rem; align-items: center; }
+
+    .output-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: auto;
+      max-height: 520px;
+      position: relative;
+    }
+
+    pre {
+      font-family: var(--mono);
+      font-size: .78rem;
+      line-height: 1.65;
+      padding: 1.25rem;
+      white-space: pre;
+      color: var(--text);
+    }
+
+    .copy-toast {
+      position: absolute;
+      top: .6rem;
+      right: .6rem;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 4px;
+      padding: .25rem .65rem;
+      font-size: .75rem;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s;
+    }
+    .copy-toast.show { opacity: 1; }
+
+    /* ── LLM Panel ────────────────────────────────────────────── */
+    #llmPanel {
+      margin-top: 2rem;
+    }
+
+    .llm-header {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .llm-header h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+
+    .llm-badge {
+      font-size: .7rem;
+      background: rgba(139,92,246,.2);
+      color: #a78bfa;
+      border: 1px solid rgba(139,92,246,.35);
+      border-radius: 99px;
+      padding: .15rem .6rem;
+      font-weight: 600;
+      letter-spacing: .3px;
+    }
+
+    .llm-card {
+      background: var(--surface);
+      border: 1px solid rgba(139,92,246,.3);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+    }
+
+    .prompt-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+      margin-top: .5rem;
+    }
+
+    .chip {
+      padding: .35rem .85rem;
+      border-radius: 99px;
+      font-size: .82rem;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      transition: all .15s;
+      user-select: none;
+    }
+    .chip:hover { color: var(--text); border-color: #a78bfa; }
+    .chip.active {
+      background: rgba(139,92,246,.2);
+      color: #a78bfa;
+      border-color: rgba(139,92,246,.5);
+    }
+
+    .custom-prompt-wrap {
+      display: none;
+      margin-top: .75rem;
+    }
+    .custom-prompt-wrap.visible { display: block; }
+
+    textarea {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: .88rem;
+      line-height: 1.55;
+      padding: .65rem .85rem;
+      resize: vertical;
+      width: 100%;
+      outline: none;
+      transition: border-color .15s;
+      min-height: 90px;
+    }
+    textarea:focus { border-color: #a78bfa; }
+    textarea::placeholder { color: var(--muted); }
+
+    .btn-analyze {
+      background: rgba(139,92,246,.85);
+      color: #fff;
+    }
+    .btn-analyze:hover:not(:disabled) { background: #7c3aed; }
+
+    .llm-output-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin-top: 1rem;
+      max-height: 600px;
+      overflow-y: auto;
+      font-size: .875rem;
+      line-height: 1.75;
+      white-space: pre-wrap;
+      word-break: break-word;
+      position: relative;
+    }
+
+    .llm-output-box.hidden { display: none; }
+
+    .llm-placeholder {
+      color: var(--muted);
+      font-size: .85rem;
+      text-align: center;
+      padding: 2rem 0;
+    }
+
+    .llm-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: #a78bfa;
+      margin-left: 1px;
+      vertical-align: text-bottom;
+      animation: blink .7s steps(1) infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .llm-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: .75rem;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+
+    .token-estimate {
+      font-size: .78rem;
+      color: var(--muted);
+    }
+
+    .model-select-wrap {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    .model-select-wrap label {
+      font-size: .8rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .model-select-wrap select {
+      width: auto;
+      font-size: .82rem;
+      padding: .35rem .65rem;
+    }
+
+    /* ── Footer ───────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: .8rem;
+      margin-top: 3rem;
+      border-top: 1px solid var(--border);
+      padding-top: 1.5rem;
+    }
+
+    /* ── Responsive ───────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .form-row { flex-direction: column; align-items: stretch; }
+      .about-card { grid-template-columns: 1fr; }
+      .about-main { grid-column: 1; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577
+          0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7
+          3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236
+          1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93
+          0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267
+          1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24
+          2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81
+          2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24
+          12.297c0-6.627-5.373-12-12-12"/>
+      </svg>
+      GitHub Ingest
+    </div>
+    <p class="tagline">Turn any GitHub repository into an LLM-ready digest</p>
+  </header>
+
+  <!-- Form card -->
+  <div class="card">
+    <div class="form-row">
+      <div class="field" style="flex:2">
+        <label>Repository</label>
+        <input id="repoInput" type="text"
+          placeholder="owner/repo  or  https://github.com/owner/repo"
+          autocomplete="off" spellcheck="false" />
+      </div>
+      <button class="btn btn-primary" id="ingestBtn" onclick="startIngest()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zm.5 4.5a.5.5 0 0 0-1 0v5.793L5.354 8.146a.5.5
+            0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V4.5z"/>
+        </svg>
+        Ingest
+      </button>
+    </div>
+
+    <!-- Advanced options -->
+    <div class="advanced-toggle" onclick="toggleAdvanced()">
+      <svg id="advArrow" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"
+        style="transition:transform .2s">
+        <path d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0
+          1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+      </svg>
+      Advanced options
+    </div>
+
+    <div class="advanced-panel" id="advancedPanel">
+      <div class="field" style="flex:1;min-width:200px">
+        <label>GitHub Token</label>
+        <input id="tokenInput" type="password" placeholder="ghp_xxxxxxxxxxxx (optional)" />
+      </div>
+      <div class="field" style="flex:1;min-width:140px">
+        <label>Branch</label>
+        <input id="branchInput" type="text" placeholder="default branch" />
+      </div>
+      <div class="field" style="flex:1;min-width:160px">
+        <label>Max file size</label>
+        <select id="maxSizeInput">
+          <option value="102400">100 KB</option>
+          <option value="262144">256 KB</option>
+          <option value="524288" selected>500 KB (default)</option>
+          <option value="1048576">1 MB</option>
+          <option value="5242880">5 MB</option>
+          <option value="10485760">10 MB</option>
+          <option value="52428800">50 MB</option>
+          <option value="2147483647">No limit</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-label">
+        <span id="progressStatus">Fetching repository…</span>
+        <span id="progressPct"></span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressBar"></div>
+      </div>
+      <div class="progress-file" id="progressFile"></div>
+    </div>
+
+    <!-- Error -->
+    <div class="error-banner" id="errorBanner"></div>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+
+    <!-- About -->
+    <div class="card" id="aboutCard" style="margin-top:1.5rem">
+      <div class="about-main">
+        <div class="repo-title">
+          <a id="repoLink" href="#" target="_blank" rel="noopener"></a>
+          <span class="branch-badge" id="branchBadge"></span>
+        </div>
+        <div class="description" id="repoDesc"></div>
+        <div class="topics" id="repoTopics"></div>
+        <div class="stat-grid" id="statGrid"></div>
+        <div class="meta-row" id="metaRow"></div>
+      </div>
+    </div>
+
+    <!-- Summary bar -->
+    <div class="summary-bar" style="margin-top:1rem" id="summaryBar">
+      <div class="summary-stat">
+        <span class="num" id="sumIngested">—</span>
+        <span class="lbl">Files ingested</span>
+      </div>
+      <div class="summary-stat">
+        <span class="num" id="sumSkipped">—</span>
+        <span class="lbl">Files skipped</span>
+      </div>
+      <div class="summary-stat">
+        <span class="num" id="sumSize">—</span>
+        <span class="lbl">Digest size</span>
+      </div>
+    </div>
+
+    <!-- Output panel -->
+    <div class="output-header">
+      <div class="tabs">
+        <div class="tab active" id="tabTxt" onclick="switchTab('txt')">TXT digest</div>
+        <div class="tab" id="tabJson" onclick="switchTab('json')">JSON</div>
+        <div class="tab" id="tabTree" onclick="switchTab('tree')">File tree</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-secondary" onclick="copyOutput()">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2
+              0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1
+              0 0 1 1-1h1v-1z"/>
+            <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5
+              0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0
+              0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+          </svg>
+          Copy
+        </button>
+        <button class="btn btn-secondary" id="downloadTxtBtn" onclick="download('txt')">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5
+              0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+            <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5
+              10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+          </svg>
+          .txt
+        </button>
+        <button class="btn btn-secondary" id="downloadJsonBtn" onclick="download('json')">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5
+              0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+            <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5
+              10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+          </svg>
+          .json
+        </button>
+      </div>
+    </div>
+
+    <div class="output-box">
+      <pre id="outputPre"></pre>
+      <div class="copy-toast" id="copyToast">Copied!</div>
+    </div>
+
+  </div><!-- /results -->
+
+  <!-- LLM Analysis Panel -->
+  <div id="llmPanel">
+    <div class="llm-header">
+      <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a78bfa"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a10 10 0 1 0 10 10"/>
+          <path d="M12 6v6l4 2"/>
+          <circle cx="18" cy="6" r="3" fill="#a78bfa" stroke="none"/>
+        </svg>
+        LLM Analysis
+      </h2>
+      <span class="llm-badge">Gemini</span>
+    </div>
+
+    <div class="llm-card">
+
+      <!-- Row 1: Provider tabs -->
+      <div class="field">
+        <label>Provider</label>
+        <div class="prompt-chips" id="providerChips">
+          <div class="chip active" data-provider="groq"       onclick="selectProvider(this)">Groq <span style="font-size:.7rem;opacity:.7">free · no card</span></div>
+          <div class="chip"        data-provider="mistral"    onclick="selectProvider(this)">Mistral <span style="font-size:.7rem;opacity:.7">free · no card</span></div>
+          <div class="chip"        data-provider="openrouter" onclick="selectProvider(this)">OpenRouter <span style="font-size:.7rem;opacity:.7">free · no card</span></div>
+          <div class="chip"        data-provider="gemini"     onclick="selectProvider(this)">Gemini <span style="font-size:.7rem;opacity:.7">may need billing</span></div>
+        </div>
+      </div>
+
+      <!-- Row 2: API key + model -->
+      <div class="form-row" style="margin-top:.75rem">
+        <div class="field" style="flex:2">
+          <label>API Key</label>
+          <input id="llmApiKey" type="password" placeholder="Loading…" />
+          <span id="keyHint" style="font-size:.75rem;color:var(--muted);margin-top:.3rem"></span>
+        </div>
+        <div class="model-select-wrap">
+          <label>Model</label>
+          <select id="modelSelect"></select>
+        </div>
+      </div>
+
+      <!-- Context window warning -->
+      <div id="ctxWarning" style="display:none;margin-top:.5rem;font-size:.8rem;
+        color:#fbbf24;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);
+        border-radius:6px;padding:.5rem .75rem"></div>
+
+      <!-- Row 2: Prompt type chips -->
+      <div class="field" style="margin-top:1rem">
+        <label>Analysis Type</label>
+        <div class="prompt-chips">
+          <div class="chip active" data-type="summary"    onclick="selectPrompt(this)">Summary</div>
+          <div class="chip"        data-type="architecture" onclick="selectPrompt(this)">Architecture</div>
+          <div class="chip"        data-type="security"   onclick="selectPrompt(this)">Security Review</div>
+          <div class="chip"        data-type="onboarding" onclick="selectPrompt(this)">Onboarding Guide</div>
+          <div class="chip"        data-type="quality"    onclick="selectPrompt(this)">Code Quality</div>
+          <div class="chip"        data-type="custom"     onclick="selectPrompt(this)">Custom</div>
+        </div>
+        <div class="custom-prompt-wrap" id="customPromptWrap">
+          <textarea id="customPrompt"
+            placeholder="Ask anything about the repository… e.g. 'List all API endpoints and explain what each one does.'"></textarea>
+        </div>
+      </div>
+
+      <!-- Row 3: token estimate + analyze button -->
+      <div class="llm-actions">
+        <span class="token-estimate" id="tokenEstimate"></span>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <button class="btn btn-secondary" id="testKeyBtn" onclick="testApiKey()" title="Send a tiny test request to verify the key works">
+            Test key
+          </button>
+          <button class="btn btn-analyze" id="analyzeBtn" onclick="startAnalysis()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+            Analyze
+          </button>
+        </div>
+      </div>
+
+      <!-- Output -->
+      <div class="llm-output-box hidden" id="llmOutput">
+        <div class="llm-placeholder" id="llmPlaceholder">
+          Analysis will appear here…
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:.6rem;gap:.5rem">
+        <button class="btn btn-secondary" onclick="copyLlmOutput()" id="copyLlmBtn" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2
+              0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1
+              0 0 1 1-1h1v-1z"/>
+            <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5
+              0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0
+              0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+          </svg>
+          Copy
+        </button>
+        <button class="btn btn-secondary" onclick="downloadLlmOutput()" id="downloadLlmBtn" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5
+              0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+            <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5
+              10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+          </svg>
+          Download .txt
+        </button>
+      </div>
+
+    </div><!-- /llm-card -->
+  </div><!-- /llmPanel -->
+
+  <footer>
+    GitHub Ingest &mdash; powered by the
+    <a href="https://docs.github.com/rest" target="_blank" rel="noopener">GitHub REST API</a>
+    &middot; Swagger docs at
+    <a href="/docs" target="_blank">/docs</a>
+  </footer>
+
+</div><!-- /page -->
+
+<script>
+  /* ── State ──────────────────────────────────────────────────── */
+  let _data    = null;   // full JSON response
+  let _txtBlob = null;   // text digest string
+  let _tab     = 'txt';
+
+  /* ── Advanced panel ─────────────────────────────────────────── */
+  function toggleAdvanced() {
+    const panel = document.getElementById('advancedPanel');
+    const arrow = document.getElementById('advArrow');
+    const open  = panel.classList.toggle('open');
+    arrow.style.transform = open ? 'rotate(90deg)' : '';
+  }
+
+  /* ── Ingest ─────────────────────────────────────────────────── */
+  async function startIngest() {
+    const repo  = document.getElementById('repoInput').value.trim();
+    if (!repo) { showError('Please enter a repository.'); return; }
+
+    const token   = document.getElementById('tokenInput').value.trim() || null;
+    const branch  = document.getElementById('branchInput').value.trim() || null;
+    const maxSize = parseInt(document.getElementById('maxSizeInput').value);
+
+    hideError();
+    setLoading(true);
+    showProgress('Fetching repository metadata…', 0);
+    document.getElementById('results').classList.remove('visible');
+
+    // Fake smooth progress while we wait for the (potentially slow) API call
+    const fakeTimer = fakeProgress();
+
+    try {
+      let res;
+      try {
+        res = await fetch('/ingest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo, token, branch, max_file_size: maxSize }),
+        });
+      } catch (_) {
+        throw new Error(
+          'Cannot reach the server. Make sure uvicorn is running on port 8001.'
+        );
+      }
+
+      clearInterval(fakeTimer);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        let msg = err.detail || `HTTP ${res.status}`;
+        // Surface rate-limit hint prominently
+        if (msg.includes('rate limit')) {
+          msg = 'GitHub rate limit exceeded. Add a GitHub Token in Advanced options to get 5,000 req/h instead of 60.';
+        }
+        throw new Error(msg);
+      }
+
+      _data = await res.json();
+
+      // Build the TXT digest in-browser — no second API call needed
+      showProgress('Rendering text digest…', 95);
+      _txtBlob = buildTxtDigest(_data);
+
+      showProgress('Done!', 100);
+      await sleep(400);
+
+      renderResults();
+    } catch (e) {
+      clearInterval(fakeTimer);
+      hideProgress();
+      showError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* fake smooth progress bar animation */
+  function fakeProgress() {
+    let pct = 5;
+    const stages = [
+      [10, 'Fetching repo metadata…'],
+      [30, 'Resolving branch tree…'],
+      [55, 'Downloading file contents…'],
+      [80, 'Processing files…'],
+      [90, 'Almost there…'],
+    ];
+    let si = 0;
+    return setInterval(() => {
+      if (pct < 90) {
+        pct += Math.random() * 2.5;
+        if (si < stages.length && pct >= stages[si][0]) {
+          showProgress(stages[si][1], pct);
+          si++;
+        } else {
+          setProgressBar(pct);
+        }
+      }
+    }, 350);
+  }
+
+  /* ── Render results ─────────────────────────────────────────── */
+  function renderResults() {
+    hideProgress();
+    const d = _data;
+    const a = d.about;
+
+    // Repo title / link
+    const [owner, repo] = d.repository.split('/');
+    const link = document.getElementById('repoLink');
+    link.href = `https://github.com/${d.repository}`;
+    link.textContent = d.repository;
+
+    document.getElementById('branchBadge').textContent = d.branch;
+
+    // Description
+    document.getElementById('repoDesc').textContent = a.description || '';
+
+    // Topics
+    const topicsEl = document.getElementById('repoTopics');
+    topicsEl.innerHTML = '';
+    (a.topics || []).forEach(t => {
+      const span = document.createElement('span');
+      span.className = 'topic';
+      span.textContent = t;
+      topicsEl.appendChild(span);
+    });
+
+    // Stats
+    const statGrid = document.getElementById('statGrid');
+    statGrid.innerHTML = '';
+    const stats = [
+      [starIcon(),    a.stars  != null ? `${a.stars.toLocaleString()} stars`  : null],
+      [forkIcon(),    a.forks  != null ? `${a.forks.toLocaleString()} forks`  : null],
+      [watchIcon(),   a.watchers != null ? `${a.watchers.toLocaleString()} watching` : null],
+      [issueIcon(),   a.open_issues != null ? `${a.open_issues} issues` : null],
+      [langIcon(),    a.language || null],
+      [licIcon(),     a.license  || null],
+    ];
+    stats.forEach(([icon, label]) => {
+      if (!label) return;
+      const div = document.createElement('div');
+      div.className = 'stat';
+      div.innerHTML = `${icon} ${label}`;
+      statGrid.appendChild(div);
+    });
+
+    // Meta row
+    const metaRow = document.getElementById('metaRow');
+    metaRow.innerHTML = '';
+    if (a.created_at) metaRow.innerHTML += `<span>Created ${fmt(a.created_at)}</span>`;
+    if (a.updated_at) metaRow.innerHTML += `<span>Updated ${fmt(a.updated_at)}</span>`;
+    if (a.size_kb)    metaRow.innerHTML += `<span>${a.size_kb.toLocaleString()} KB repo size</span>`;
+    if (a.visibility) metaRow.innerHTML += `<span style="text-transform:capitalize">${a.visibility}</span>`;
+    if (a.homepage)   metaRow.innerHTML += `<span><a href="${a.homepage}" target="_blank" rel="noopener">${a.homepage}</a></span>`;
+
+    // Summary bar
+    document.getElementById('sumIngested').textContent = d.summary.files_ingested.toLocaleString();
+    document.getElementById('sumSkipped').textContent  = d.summary.files_skipped.toLocaleString();
+    const kb = (_txtBlob.length / 1024).toFixed(0);
+    document.getElementById('sumSize').textContent = `${Number(kb).toLocaleString()} KB`;
+
+    // Output
+    switchTab(_tab);
+
+    document.getElementById('results').classList.add('visible');
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    updateTokenEstimate();
+  }
+
+  /* ── Tabs ───────────────────────────────────────────────────── */
+  function switchTab(tab) {
+    _tab = tab;
+    ['txt','json','tree'].forEach(t => {
+      document.getElementById(`tab${t.charAt(0).toUpperCase()+t.slice(1)}`).classList.toggle('active', t === tab);
+    });
+    if (!_data) return;
+    const pre = document.getElementById('outputPre');
+    if (tab === 'txt') {
+      pre.textContent = _txtBlob;
+    } else if (tab === 'json') {
+      // Pretty print without files (too large) — show summary
+      const view = { ...(_data), files: Object.fromEntries(
+        Object.entries(_data.files).map(([k,v]) => [k, v.length > 300 ? v.slice(0,300)+'…' : v])
+      )};
+      pre.textContent = JSON.stringify(view, null, 2);
+    } else {
+      pre.textContent = buildTreeText(_data.tree, _data.repository.split('/')[1]);
+    }
+  }
+
+  function buildTreeText(paths, repo) {
+    const tree = {};
+    paths.forEach(p => {
+      const parts = p.split('/');
+      let node = tree;
+      parts.forEach(part => { node = node[part] = node[part] || {}; });
+    });
+    const lines = [`${repo}/`];
+    function render(node, prefix) {
+      const items = Object.keys(node).sort();
+      items.forEach((name, idx) => {
+        const last = idx === items.length - 1;
+        const conn = last ? '└── ' : '├── ';
+        const child = node[name];
+        const hasChildren = Object.keys(child).length > 0;
+        lines.push(`${prefix}${conn}${name}${hasChildren ? '/' : ''}`);
+        if (hasChildren) render(child, prefix + (last ? '    ' : '│   '));
+      });
+    }
+    render(tree, '');
+    return lines.join('\n');
+  }
+
+  /* ── Copy ───────────────────────────────────────────────────── */
+  function copyOutput() {
+    const text = document.getElementById('outputPre').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const toast = document.getElementById('copyToast');
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 1800);
+    });
+  }
+
+  /* ── Download ───────────────────────────────────────────────── */
+  function download(fmt) {
+    if (!_data) return;
+    const slug = _data.repository.replace('/', '_');
+    if (fmt === 'txt') {
+      trigger(_txtBlob, `${slug}.txt`, 'text/plain');
+    } else {
+      trigger(JSON.stringify(_data, null, 2), `${slug}.json`, 'application/json');
+    }
+  }
+
+  function trigger(content, filename, mime) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  /* ── UI helpers ─────────────────────────────────────────────── */
+  function setLoading(on) {
+    const btn = document.getElementById('ingestBtn');
+    btn.disabled = on;
+    btn.innerHTML = on
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.5" style="animation:spin .8s linear infinite">
+           <path d="M21 12a9 9 0 1 1-6.22-8.56"/>
+         </svg> Ingesting…`
+      : `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+           <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zm.5 4.5a.5.5 0 0 0-1 0v5.793L5.354
+             8.146a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5
+             10.293V4.5z"/>
+         </svg> Ingest`;
+  }
+
+  function showProgress(label, pct) {
+    document.getElementById('progressWrap').classList.add('visible');
+    document.getElementById('progressStatus').textContent = label;
+    setProgressBar(pct);
+  }
+
+  function setProgressBar(pct) {
+    document.getElementById('progressBar').style.width = `${Math.min(pct, 100)}%`;
+    document.getElementById('progressPct').textContent = pct >= 1 ? `${Math.round(pct)}%` : '';
+  }
+
+  function hideProgress() {
+    document.getElementById('progressWrap').classList.remove('visible');
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorBanner');
+    el.textContent = `Error: ${msg}`;
+    el.classList.add('visible');
+  }
+
+  function hideError() {
+    document.getElementById('errorBanner').classList.remove('visible');
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function fmt(iso) {
+    return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  /* ── Enter key ──────────────────────────────────────────────── */
+  document.getElementById('repoInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') startIngest();
+  });
+
+  /* ── SVG icons ──────────────────────────────────────────────── */
+  const i = s => `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">${s}</svg>`;
+  const starIcon  = () => i('<path d="M3.612 15.443c-.386.198-.824-.149-.746-.592l.83-4.73L.173 6.765c-.329-.314-.158-.888.283-.95l4.898-.696L7.538.792c.197-.39.73-.39.927 0l2.184 4.327 4.898.696c.441.062.612.636.282.95l-3.522 3.356.83 4.73c.078.443-.36.79-.746.592L8 13.187l-4.389 2.256z"/>');
+  const forkIcon  = () => i('<path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 2.122a2.25 2.25 0 1 0-1.5 0v.878A2.25 2.25 0 0 0 5.75 8.5h1.5v2.128a2.251 2.251 0 1 0 1.5 0V8.5h1.5a2.25 2.25 0 0 0 2.25-2.25v-.878a2.25 2.25 0 1 0-1.5 0v.878a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 5 6.25v-.878zm3.75 7.378a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm3-8.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z"/>');
+  const watchIcon = () => i('<path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>');
+  const issueIcon = () => i('<path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0z"/>');
+  const langIcon  = () => i('<path d="M4.708 1.5a.5.5 0 0 0-.707.707L6.293 4.5 4 6.793a.5.5 0 0 0 .707.707l2.5-2.5a.5.5 0 0 0 0-.707L4.708 1.5zM8 7.5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1H8z"/>');
+  const licIcon   = () => i('<path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>');
+
+  /* ── TXT digest builder (mirrors server-side formatter.py) ─── */
+  function buildTxtDigest(d) {
+    const SEP = '='.repeat(64);
+    const a = d.about;
+    const lines = [];
+
+    lines.push(SEP, `REPOSITORY: ${d.repository}  [${d.branch}]`, SEP, '');
+    lines.push('ABOUT', '-----');
+    if (a.description)  lines.push(`Description : ${a.description}`);
+    if (a.homepage)     lines.push(`Homepage    : ${a.homepage}`);
+    if (a.language)     lines.push(`Language    : ${a.language}`);
+    if (a.license)      lines.push(`License     : ${a.license}`);
+    if (a.topics?.length) lines.push(`Topics      : ${a.topics.join(', ')}`);
+
+    const stats = [];
+    if (a.stars    != null) stats.push(`Stars: ${a.stars.toLocaleString()}`);
+    if (a.forks    != null) stats.push(`Forks: ${a.forks.toLocaleString()}`);
+    if (a.watchers != null) stats.push(`Watchers: ${a.watchers.toLocaleString()}`);
+    if (a.open_issues != null) stats.push(`Open issues: ${a.open_issues.toLocaleString()}`);
+    if (stats.length) lines.push(`Stats       : ${stats.join(' | ')}`);
+    if (a.created_at)   lines.push(`Created     : ${a.created_at}`);
+    if (a.updated_at)   lines.push(`Last updated: ${a.updated_at}`);
+    if (a.size_kb != null) lines.push(`Size        : ${a.size_kb.toLocaleString()} KB`);
+    lines.push('');
+
+    lines.push(SEP, 'SUMMARY', SEP);
+    lines.push(`Files ingested : ${d.summary.files_ingested.toLocaleString()}`);
+    lines.push(`Files skipped  : ${d.summary.files_skipped.toLocaleString()}`, '');
+
+    lines.push(SEP, 'DIRECTORY STRUCTURE', SEP);
+    lines.push(buildTreeText(d.tree, d.repository.split('/')[1]), '');
+
+    lines.push(SEP, 'FILES', SEP, '');
+    d.tree.forEach(path => {
+      const dashes = '─'.repeat(Math.max(0, 56 - path.length));
+      lines.push(`──── ${path} ${dashes}`);
+      lines.push(d.files[path] || '');
+      lines.push('');
+    });
+
+    if (d.skipped?.length) {
+      lines.push(SEP, `SKIPPED FILES (${d.skipped.length})`, SEP);
+      d.skipped.forEach(p => lines.push(`  - ${p}`));
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  /* ── LLM Analysis ───────────────────────────────────────────── */
+  let _selectedPromptType = 'summary';
+  let _selectedProvider   = 'groq';
+  let _analyzing = false;
+
+  // Provider config fetched from server
+  const PROVIDERS = {
+    groq: {
+      key_hint: 'Free at console.groq.com — no credit card required',
+      key_url:  'https://console.groq.com/keys',
+      max_context_tokens: 128000,
+      models: [
+        { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B · 128k ctx · recommended' },
+        { id: 'llama-3.1-8b-instant',    label: 'Llama 3.1 8B · 128k ctx · fastest' },
+        { id: 'mixtral-8x7b-32768',      label: 'Mixtral 8x7B · 32k ctx' },
+      ],
+    },
+    mistral: {
+      key_hint: 'Free tier at console.mistral.ai — no credit card required',
+      key_url:  'https://console.mistral.ai/api-keys',
+      max_context_tokens: 32000,
+      models: [
+        { id: 'mistral-small-latest', label: 'Mistral Small · 32k ctx' },
+        { id: 'open-mistral-7b',      label: 'Mistral 7B (open) · 32k ctx' },
+        { id: 'mistral-large-latest', label: 'Mistral Large · 128k ctx' },
+      ],
+    },
+    openrouter: {
+      key_hint: 'Free models at openrouter.ai/keys — no credit card required',
+      key_url:  'https://openrouter.ai/keys',
+      max_context_tokens: 131000,
+      models: [
+        { id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B · 131k ctx · free' },
+        { id: 'meta-llama/llama-3.1-8b-instruct:free',  label: 'Llama 3.1 8B · 131k ctx · free' },
+        { id: 'google/gemma-3-27b-it:free',             label: 'Gemma 3 27B · 96k ctx · free' },
+        { id: 'mistralai/mistral-7b-instruct:free',     label: 'Mistral 7B · 32k ctx · free' },
+      ],
+    },
+    gemini: {
+      key_hint: 'Free at aistudio.google.com/apikey — may require billing in some regions',
+      key_url:  'https://aistudio.google.com/apikey',
+      max_context_tokens: 1000000,
+      models: [
+        { id: 'gemini-2.0-flash',     label: 'Gemini 2.0 Flash · 1M ctx' },
+        { id: 'gemini-1.5-flash',     label: 'Gemini 1.5 Flash · 1M ctx' },
+        { id: 'gemini-1.5-pro',       label: 'Gemini 1.5 Pro · 2M ctx' },
+      ],
+    },
+  };
+
+  function selectProvider(el) {
+    document.querySelectorAll('#providerChips .chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    _selectedProvider = el.dataset.provider;
+    const cfg = PROVIDERS[_selectedProvider];
+
+    // Update model dropdown
+    const sel = document.getElementById('modelSelect');
+    sel.innerHTML = '';
+    cfg.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.label;
+      sel.appendChild(opt);
+    });
+
+    // Update key hint
+    const hint = document.getElementById('keyHint');
+    hint.innerHTML = `<a href="${cfg.key_url}" target="_blank" rel="noopener">${cfg.key_hint}</a>`;
+
+    // Update placeholder
+    document.getElementById('llmApiKey').placeholder =
+      _selectedProvider === 'groq'       ? 'gsk_…'   :
+      _selectedProvider === 'mistral'    ? 'your Mistral API key' :
+      _selectedProvider === 'openrouter' ? 'sk-or-…' : 'AIza…';
+
+    updateContextWarning();
+  }
+
+  // Initialise with Groq on load
+  selectProvider(document.querySelector('#providerChips .chip[data-provider="groq"]'));
+
+  function selectPrompt(el) {
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    _selectedPromptType = el.dataset.type;
+    const wrap = document.getElementById('customPromptWrap');
+    wrap.classList.toggle('visible', _selectedPromptType === 'custom');
+  }
+
+  // Update token estimate whenever digest changes
+  function updateTokenEstimate() {
+    const est = document.getElementById('tokenEstimate');
+    if (!_txtBlob) { est.textContent = 'Ingest a repository first'; return; }
+    const tokens = Math.round(_txtBlob.length / 4);
+    const kb = (_txtBlob.length / 1024).toFixed(0);
+    est.textContent = `~${tokens.toLocaleString()} tokens · ${Number(kb).toLocaleString()} KB digest`;
+    updateContextWarning();
+  }
+
+  async function testApiKey() {
+    const apiKey = document.getElementById('llmApiKey').value.trim();
+    if (!apiKey) { alert('Enter your API key first.'); return; }
+    const model = document.getElementById('modelSelect').value;
+    const btn = document.getElementById('testKeyBtn');
+    btn.disabled = true;
+    btn.textContent = 'Testing…';
+    const box = document.getElementById('llmOutput');
+    box.classList.remove('hidden');
+    box.textContent = 'Sending a minimal test request to ' + PROVIDERS[_selectedProvider].models[0]?.label?.split('·')[0]?.trim() + '…';
+    try {
+      const res = await fetch('/analyze/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey, provider: _selectedProvider, model }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        box.textContent = 'Key test failed:\n\n' + data.detail;
+      } else {
+        box.textContent = 'Key works! Provider "' + data.provider + '" replied: "' + data.response + '"\n\nReady to analyze.';
+      }
+    } catch (e) {
+      box.textContent = 'Cannot reach server: ' + e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Test key';
+    }
+  }
+
+  function updateContextWarning() {
+    const warn = document.getElementById('ctxWarning');
+    if (!_txtBlob) { warn.style.display = 'none'; return; }
+    const tokens = Math.round(_txtBlob.length / 4);
+    const max = PROVIDERS[_selectedProvider]?.max_context_tokens || 128000;
+    if (tokens > max * 0.9) {
+      warn.style.display = '';
+      warn.textContent = `Warning: digest is ~${tokens.toLocaleString()} tokens but this provider's context window is ${(max/1000).toFixed(0)}k. The request may be truncated or fail. Try switching to Groq or Gemini for larger context.`;
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+
+  async function startAnalysis() {
+    const apiKey = document.getElementById('llmApiKey').value.trim();
+    if (!apiKey) { alert('Please enter your API key.'); return; }
+    if (!_txtBlob) { alert('Ingest a repository first.'); return; }
+    if (_analyzing) return;
+
+    const model = document.getElementById('modelSelect').value;
+    const customPrompt = document.getElementById('customPrompt').value.trim();
+
+    if (_selectedPromptType === 'custom' && !customPrompt) {
+      alert('Please enter a custom prompt.'); return;
+    }
+
+    _analyzing = true;
+    const btn = document.getElementById('analyzeBtn');
+    btn.disabled = true;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2.5" style="animation:spin .8s linear infinite">
+      <path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg> Analyzing…`;
+
+    const box = document.getElementById('llmOutput');
+    const copyBtn = document.getElementById('copyLlmBtn');
+    box.classList.remove('hidden');
+    copyBtn.style.display = 'none';
+    document.getElementById('downloadLlmBtn').style.display = 'none';
+    box.innerHTML = '<span class="llm-cursor"></span>';
+
+    let fullText = '';
+
+    try {
+      const res = await fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          digest: _txtBlob,
+          api_key: apiKey,
+          provider: _selectedProvider,
+          prompt_type: _selectedPromptType,
+          custom_prompt: customPrompt || null,
+          model,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.detail || err.error || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      box.innerHTML = '';  // clear cursor placeholder
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE lines from buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop();  // last partial line stays in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6);
+          if (payload === '[DONE]') break;
+          try {
+            const chunk = JSON.parse(payload);
+            if (chunk.error) throw new Error(chunk.error);
+            if (chunk.text) {
+              fullText += chunk.text;
+              box.textContent = fullText;
+              box.scrollTop = box.scrollHeight;
+            }
+          } catch (e) {
+            if (e.message !== 'Unexpected end of JSON input') throw e;
+          }
+        }
+      }
+
+      // Show copy + download buttons when done
+        copyBtn.style.display = '';
+        document.getElementById('downloadLlmBtn').style.display = '';
+
+    } catch (e) {
+      const msg = e.message || String(e);
+      box.textContent = `⚠ ${msg}`;
+
+      // If the message contains a retry delay, show a live countdown
+      const delayMatch = msg.match(/Retry in (\d+)s/);
+      if (delayMatch) {
+        let secs = parseInt(delayMatch[1]);
+        const appendCountdown = () => {
+          box.textContent = `⚠ ${msg}\n\nRetrying automatically in ${secs}s…`;
+        };
+        appendCountdown();
+        const tick = setInterval(() => {
+          secs--;
+          if (secs <= 0) {
+            clearInterval(tick);
+            box.textContent = '⏳ Retrying now…';
+            startAnalysis();
+          } else {
+            appendCountdown();
+          }
+        }, 1000);
+      }
+    } finally {
+      _analyzing = false;
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg> Analyze with Gemini`;
+    }
+  }
+
+  function copyLlmOutput() {
+    const text = document.getElementById('llmOutput').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('copyLlmBtn');
+      const orig = btn.innerHTML;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.innerHTML = orig; }, 1800);
+    });
+  }
+
+  function downloadLlmOutput() {
+    const text = document.getElementById('llmOutput').textContent;
+    if (!text) return;
+    const slug = _data ? _data.repository.replace('/', '_') : 'analysis';
+    const prompt = _selectedPromptType === 'custom' ? 'custom' : _selectedPromptType;
+    const filename = `${slug}_${prompt}_${_selectedProvider}.txt`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  /* ── Spinner keyframe ───────────────────────────────────────── */
+  document.head.insertAdjacentHTML('beforeend',
+    '<style>@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}</style>');
+</script>
+</body>
+</html>
