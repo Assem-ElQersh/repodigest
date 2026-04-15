@@ -336,3 +336,9 @@ Get a free token at [github.com/settings/tokens/new](https://github.com/settings
 **Noise directories:** `.git`, `node_modules`, `__pycache__`, `.venv`, `venv`, `dist`, `build`, `.next`, `.pytest_cache`, and more
 
 **Files over 500 KB** are skipped by default. Override with `--max-file-size <bytes>` or `0` for no limit.
+
+---
+
+## License
+
+MIT License. See the [LICENSE](LICENSE) file for details.
