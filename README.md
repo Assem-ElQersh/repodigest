@@ -1,4 +1,4 @@
-# repodigest
+<h1 align="center">RepoDigest</h1>
 
 Fetch any GitHub repository via the GitHub API and produce an **LLM-ready text digest** and a **structured JSON file** — including the repo's "about" metadata, full directory tree, and all file contents. Then optionally pass the digest directly to an LLM for deep analysis.
 
